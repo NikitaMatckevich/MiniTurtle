@@ -1,0 +1,164 @@
+import java_cup.runtime.*;
+import java.util.*;
+
+parser code  {: 
+  public void report_error(String message, Object info) {
+  	/* ignore */
+  }
+   
+  public void report_fatal_error(String message, Object info) {
+    int line = 0, column = 0;
+	if (info instanceof Symbol) {
+		Symbol symbol = (Symbol) info;
+		line = symbol.left;
+		column = symbol.right;
+	}
+	System.err.println("Syntax error at:" + line + ":" + column + message);
+	System.exit(1);
+  }
+:};
+
+terminal Integer INTEGER;
+terminal String IDENT;
+
+terminal DEF;
+terminal REPEAT;
+terminal PENUP;
+terminal PENDOWN;
+terminal FORWARD;
+terminal TURNLEFT;
+terminal TURNRIGHT;
+terminal COLOR;
+terminal BLACK, WHITE, RED, GREEN, BLUE;
+terminal PLUS, MINUS, MUL, DIV;
+terminal UMINUS;
+terminal IF, ELSE;
+terminal COMMA;
+terminal LPAR, RPAR;
+terminal LCUR, RCUR;
+
+non terminal File 				FILE;
+non terminal Color 				PALETTE;
+non terminal Def 				DEFINITION;
+non terminal Stmt 				STATEMENT;
+non terminal Expr 				EXPRESSION;
+non terminal LinkedList<Def> 	LIST_DEFINITION, NONEMPTY_LIST_DEFINITION;
+non terminal LinkedList<Stmt> 	LIST_STATEMENT,  NONEMPTY_LIST_STATEMENT;
+non terminal LinkedList<Expr> 	LIST_EXPRESSION, NONEMPTY_LIST_EXPRESSION;
+non terminal LinkedList<String> LIST_IDENT, 	 NONEMPTY_LIST_IDENT;
+
+precedence left PLUS, MINUS;
+precedence left MUL, DIV;
+precedence nonassoc UMINUS;
+precedence left ELSE;
+
+start with FILE;
+
+FILE ::= LIST_DEFINITION:functions LIST_STATEMENT:instructions
+			{: RESULT = new File(functions, new Sblock(instructions)); :};
+			
+PALETTE ::= BLACK
+            {: RESULT = Color.Black; :}
+			| WHITE
+			{: RESULT = Color.White; :}
+			| RED
+			{: RESULT = Color.Red; :}
+			| GREEN
+			{: RESULT = Color.Green; :}
+			| BLUE
+			{: RESULT = Color.Blue; :}
+			;
+			
+DEFINITION ::= DEF IDENT:name LPAR LIST_IDENT:args RPAR STATEMENT:body
+			{: RESULT = new Def(name, args, body); :}
+			;
+			
+STATEMENT  ::= 	PENUP
+			{: RESULT = new Spenup(); :}
+            | PENDOWN
+         	{: RESULT = new Spendown(); :}
+         	| FORWARD EXPRESSION:e
+         	{: RESULT = new Sforward(e); :}
+         	| TURNLEFT EXPRESSION:e
+         	{: RESULT = new Sturnleft(e); :}
+         	| TURNRIGHT EXPRESSION:e
+         	{: RESULT = new Sturnright(e); :}
+         	| COLOR PALETTE:p
+         	{: RESULT = new Scolor(p); :}
+         	| IDENT:name LPAR LIST_EXPRESSION:args RPAR
+         	{: RESULT = new Scall(name, args); :}
+         	| IF EXPRESSION:condition STATEMENT:body
+         	{: RESULT = new Sif(condition, body, new Sblock()); :}
+         	| IF EXPRESSION:condition STATEMENT:yes ELSE STATEMENT:no
+         	{: RESULT = new Sif(condition, yes, no); :}
+         	| REPEAT EXPRESSION:e STATEMENT:s
+         	{: RESULT = new Srepeat(e, s); :}
+         	| LCUR LIST_STATEMENT:instructions RCUR
+         	{: RESULT = new Sblock(instructions); :}
+			;
+			
+EXPRESSION ::= INTEGER:number
+			{: RESULT = new Ecst(number); :}
+         	| IDENT:name
+         	{: RESULT = new Evar(name); :}
+         	| EXPRESSION:e1 PLUS EXPRESSION:e2
+         	{: RESULT = new Ebinop(Binop.Badd, e1, e2); :}
+         	| EXPRESSION:e1 MINUS EXPRESSION:e2
+         	{: RESULT = new Ebinop(Binop.Bsub, e1, e2); :}
+         	| EXPRESSION:e1 MUL EXPRESSION:e2
+         	{: RESULT = new Ebinop(Binop.Bmul, e1, e2); :}
+         	| EXPRESSION:e1 DIV EXPRESSION:e2
+         	{: RESULT = new Ebinop(Binop.Bdiv, e1, e2); :}
+         	| MINUS EXPRESSION:e
+         	{: RESULT = new Eneg(e); :} %prec UMINUS
+         	| LPAR EXPRESSION:e RPAR
+         	{: RESULT = e; :}
+         	;
+         	
+LIST_DEFINITION ::=
+			{: RESULT = new LinkedList<Def>(); :}
+			| NONEMPTY_LIST_DEFINITION:l
+			{: RESULT = l; :}
+			;
+			
+NONEMPTY_LIST_DEFINITION ::= DEFINITION:head
+			{: LinkedList<Def> list = new LinkedList<Def>(); list.addFirst(head); RESULT = list; :}
+			| DEFINITION:head NONEMPTY_LIST_DEFINITION:tail 
+			{: tail.addFirst(head); RESULT = tail; :}
+         	;
+         	
+LIST_STATEMENT ::=
+			{: RESULT = new LinkedList<Stmt>(); :}
+			| NONEMPTY_LIST_STATEMENT:l
+			{: RESULT = l; :}
+			;
+			
+NONEMPTY_LIST_STATEMENT ::= STATEMENT:head
+			{: LinkedList<Stmt> list = new LinkedList<Stmt>(); list.addFirst(head); RESULT = list; :}
+			| STATEMENT:head NONEMPTY_LIST_STATEMENT:tail 
+			{: tail.addFirst(head); RESULT = tail; :}
+			;
+			
+LIST_EXPRESSION ::=
+			{: RESULT = new LinkedList<Expr>(); :}
+			| NONEMPTY_LIST_EXPRESSION:l
+			{: RESULT = l; :}
+			;
+			
+NONEMPTY_LIST_EXPRESSION ::= EXPRESSION:head
+			{: LinkedList<Expr> list = new LinkedList<Expr>(); list.addFirst(head); RESULT = list; :}
+			| EXPRESSION:head COMMA NONEMPTY_LIST_EXPRESSION:tail 
+			{: tail.addFirst(head); RESULT = tail; :}
+			;
+			
+LIST_IDENT ::=
+			{: RESULT = new LinkedList<String>(); :}
+			| NONEMPTY_LIST_IDENT:l
+			{: RESULT = l; :}
+			;
+			
+NONEMPTY_LIST_IDENT ::= IDENT:head
+			{: LinkedList<String> list = new LinkedList<String>(); list.addFirst(head); RESULT = list; :}
+			| IDENT:head COMMA NONEMPTY_LIST_IDENT:tail 
+			{: tail.addFirst(head); RESULT = tail; :}
+			;
